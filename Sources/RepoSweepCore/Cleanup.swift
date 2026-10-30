@@ -17,6 +17,10 @@ import Foundation
 ///
 /// Nothing is removed with `--force`: a worktree with uncommitted work, or a
 /// locked one, is kept and named in the log, and so is its branch.
+///
+/// `run` returns the space freed on disk: the size of each worktree it
+/// removed. Deleting a branch frees next to nothing until git collects its
+/// objects, so branches aren't counted.
 public struct Cleanup: Sendable {
     public typealias PRLookup = @Sendable (_ branch: String) async throws -> PullRequests.BranchState
 
@@ -37,7 +41,8 @@ public struct Cleanup: Sendable {
         }
     }
 
-    public func run(log: Logger) async throws {
+    @discardableResult
+    public func run(log: Logger) async throws -> Int64 {
         try await repo.gitChecked("fetch", "--prune")
         let prune = await repo.git(dryRun ? ["worktree", "prune", "-n", "-v"] : ["worktree", "prune", "-v"])
         for line in (prune.stdout + prune.stderr).split(separator: "\n") {
@@ -49,8 +54,8 @@ public struct Cleanup: Sendable {
             ? "origin/\(base)" : base
         let trees = try await linkedWorktrees()
 
-        try await cleanBranches(base: base, baseRef: baseRef, trees: trees, log: log)
-        await cleanDetachedWorktrees(baseRef: baseRef, trees: trees, log: log)
+        let freed = try await cleanBranches(base: base, baseRef: baseRef, trees: trees, log: log)
+        return freed + (await cleanDetachedWorktrees(baseRef: baseRef, trees: trees, log: log))
     }
 
     // MARK: Branches
@@ -103,16 +108,18 @@ public struct Cleanup: Sendable {
         return await repo.git("cherry", baseRef, squashed.out).out.hasPrefix("-")
     }
 
-    func cleanBranches(base: String, baseRef: String, trees: [Worktree], log: Logger) async throws {
+    /// Returns the space freed by the worktrees removed with their branches.
+    func cleanBranches(base: String, baseRef: String, trees: [Worktree], log: Logger) async throws -> Int64 {
         let candidates = try await goneBranches(excluding: base)
         guard !candidates.isEmpty else {
             await log("no [gone] branches")
-            return
+            return 0
         }
         let current = await repo.currentBranch()
         let attached = Dictionary(trees.compactMap { tree in tree.branch.map { ($0, tree) } },
                                   uniquingKeysWith: { first, _ in first })
 
+        var freed: Int64 = 0
         for branch in candidates {
             let verdict = await verdict(for: branch, baseRef: baseRef, log: log)
             guard case .delete(let reason) = verdict else {
@@ -126,14 +133,18 @@ public struct Cleanup: Sendable {
             if checkedOut {
                 guard try await switchToBase(base, from: branch, log: log) else { continue }
             }
-            if let tree = attached[branch], !(await remove(tree, reason: "branch deleted", log: log)) {
-                // git won't drop a branch a worktree still has checked out.
-                await log("  \(branch) kept too, its worktree still holds it")
-                continue
+            if let tree = attached[branch] {
+                guard let size = await remove(tree, reason: "branch deleted", log: log) else {
+                    // git won't drop a branch a worktree still has checked out.
+                    await log("  \(branch) kept too, its worktree still holds it")
+                    continue
+                }
+                freed += size
             }
             try await repo.gitChecked("branch", "-D", branch)
             await log("  deleted \(branch)")
         }
+        return freed
     }
 
     /// Leaves `branch` for an up-to-date `base`, the way `git-main` does.
@@ -196,30 +207,35 @@ public struct Cleanup: Sendable {
         return trees.filter { !skip.contains(resolved($0.path)) }
     }
 
-    func remove(_ tree: Worktree, reason: String, log: Logger) async -> Bool {
+    /// Removes `tree` and returns the space that freed, or nil when the
+    /// worktree is kept.
+    func remove(_ tree: Worktree, reason: String, log: Logger) async -> Int64? {
         let path = tree.path
-        guard FileManager.default.fileExists(atPath: path) else { return true }
+        guard FileManager.default.fileExists(atPath: path) else { return 0 }
         if tree.locked {
             await log("  worktree kept: \(path) (locked)")
-            return false
+            return nil
         }
         if !(await Shell.run(Shell.gitPath ?? "git", ["status", "--porcelain"], cwd: URL(fileURLWithPath: path)).out.isEmpty) {
             await log("  worktree kept: \(path) (uncommitted work)")
-            return false
+            return nil
         }
+        let size = DiskUsage.allocatedSize(of: URL(fileURLWithPath: path)) ?? 0
         let result = await repo.git("worktree", "remove", path)
         guard result.ok else {
             await log("  worktree kept: \(path) (\(result.err))")
-            return false
+            return nil
         }
         await log("  worktree removed: \(path) (\(reason))")
-        return true
+        return size
     }
 
     /// Worktrees whose branch is already gone, left detached. Detached at a
     /// commit already in base means the work shipped; detached anywhere else
     /// means unmerged work nobody tracks any more -- reported, never removed.
-    func cleanDetachedWorktrees(baseRef: String, trees: [Worktree], log: Logger) async {
+    /// Returns the space freed by the worktrees removed.
+    func cleanDetachedWorktrees(baseRef: String, trees: [Worktree], log: Logger) async -> Int64 {
+        var freed: Int64 = 0
         for tree in trees where tree.detached {
             guard FileManager.default.fileExists(atPath: tree.path) else { continue }
             let head = tree.head ?? ""
@@ -230,8 +246,9 @@ public struct Cleanup: Sendable {
             }
             await log("dangling worktree \(tree.path): remove (detached at \(short), already in \(baseRef))\(dryRun ? " [dry run]" : "")")
             if !dryRun {
-                _ = await remove(tree, reason: "detached, already in \(baseRef)", log: log)
+                freed += await remove(tree, reason: "detached, already in \(baseRef)", log: log) ?? 0
             }
         }
+        return freed
     }
 }

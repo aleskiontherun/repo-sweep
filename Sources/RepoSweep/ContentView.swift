@@ -123,20 +123,21 @@ struct WorkspaceView: View {
     }
 
     /// The working directory's size on disk and the free space left on its
-    /// volume, refreshed after each scan, Update all and Cleanup all.
+    /// volume, refreshed after each scan, update and cleanup.
     private var statusBar: some View {
         HStack(spacing: 6) {
-            Image(systemName: "internaldrive")
+            Image(systemName: "folder")
             if let size = model.directorySize {
-                Text("Working directory: \(size, format: .byteCount(style: .file))")
+                Text(size, format: .byteCount(style: .file))
             } else {
-                Text("Working directory: measuring…")
+                Text("measuring…")
             }
             if model.measuringSize && model.directorySize != nil {
                 ProgressView().controlSize(.mini)
             }
             Spacer()
             if let free = model.freeSpace {
+                Image(systemName: "internaldrive")
                 Text("\(free, format: .byteCount(style: .file)) free")
             }
         }
