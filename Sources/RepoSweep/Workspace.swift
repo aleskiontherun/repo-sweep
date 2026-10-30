@@ -115,6 +115,8 @@ final class Workspace: Identifiable {
         measurement?.cancel()
         guard let root else { return }
         let paths = repos.map(\.git.path)
+        // Free space is cheap to read, so it doesn't wait for the walk.
+        freeSpace = DiskUsage.freeSpace(at: root)
         measuringSize = true
         measurement = Task {
             let walk = Task.detached(priority: .utility) {

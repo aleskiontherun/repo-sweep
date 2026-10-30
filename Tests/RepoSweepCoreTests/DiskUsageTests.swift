@@ -50,4 +50,13 @@ struct DiskUsageTests {
         let free = try #require(DiskUsage.freeSpace(at: FileManager.default.temporaryDirectory))
         #expect(free > 0)
     }
+
+    @Test func rereadsFreeSpaceThroughTheSameURL() throws {
+        let dir = FileManager.default.temporaryDirectory
+        let before = try #require(DiskUsage.freeSpace(at: dir))
+        let blob = dir.appendingPathComponent("repo-sweep-free-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: blob) }
+        try Data(count: 300_000_000).write(to: blob)
+        #expect(try #require(DiskUsage.freeSpace(at: dir)) < before - 150_000_000)
+    }
 }

@@ -67,6 +67,10 @@ public enum DiskUsage {
     /// The space free on the volume holding `url`, counting purgeable space
     /// macOS would reclaim on demand, as Finder reports it.
     public static func freeSpace(at url: URL) -> Int64? {
+        // A URL caches the resource values it has read, so asking the same
+        // one again would only repeat the first answer.
+        var url = url
+        url.removeAllCachedResourceValues()
         let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey,
                                                        .volumeAvailableCapacityKey])
         return values?.volumeAvailableCapacityForImportantUsage
