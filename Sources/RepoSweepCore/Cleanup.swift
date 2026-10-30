@@ -11,6 +11,12 @@ import Foundation
 /// all is deleted only if `<base>` already contains its commits or an
 /// equivalent squashed patch, and reported for manual review otherwise.
 ///
+/// The branch checked out in the main checkout is a candidate too, `[gone]`
+/// or not: a merged PR doesn't always delete its remote branch. Without
+/// `[gone]` it is deleted when `<base>` holds an equal squashed patch, or
+/// holds its commits and its PR is MERGED -- a branch just cut from `<base>`
+/// is in `<base>` as well -- and never while a PR for it is open.
+///
 /// When the branch to delete is the one checked out in the main checkout,
 /// the checkout is first switched to an up-to-date `<base>` -- provided it
 /// has no local changes, which the switch could clobber.
@@ -96,6 +102,36 @@ public struct Cleanup: Sendable {
         return .keep("review manually: no PR, not merged into \(baseRef)")
     }
 
+    /// The verdict for the checked-out branch when its remote branch is still
+    /// there (or it never had one). Like `git-main`, it asks whether `<base>`
+    /// holds the branch's content -- but a branch with no commits of its own,
+    /// just cut from `<base>`, is in `<base>` too, so a branch `<base>` holds
+    /// as is also needs a merged PR. An equal squashed patch needs none: a
+    /// branch with nothing of its own never gets that far.
+    func checkedOutVerdict(for branch: String, baseRef: String, log: Logger) async -> Verdict {
+        let state: PullRequests.BranchState
+        do {
+            state = try await lookup(branch)
+        } catch {
+            await log("! \(error.localizedDescription)")
+            return .keep("couldn't check its PR")
+        }
+        if state == .open { return .keep("PR still open") }
+        if await repo.git("merge-base", "--is-ancestor", branch, baseRef).ok {
+            // At `<base>` itself it has nothing on it yet, whatever an older
+            // PR from a branch of the same name says.
+            if await repo.git("rev-parse", branch).out == (await repo.git("rev-parse", baseRef).out) {
+                return .keep("nothing on it yet, it sits at \(baseRef)")
+            }
+            if state == .merged { return .delete("PR merged, already in \(baseRef)") }
+            return .keep("no merged PR, and nothing of its own that \(baseRef) lacks")
+        }
+        if await isSquashMerged(branch, into: baseRef) {
+            return .delete("an equal patch is in \(baseRef)")
+        }
+        return .keep("not merged into \(baseRef)")
+    }
+
     /// A squash merge rewrites the branch as one new commit, so none of the
     /// branch's own commits are in base's history. Ask about content instead:
     /// collapse the branch into one commit off the merge base and let
@@ -110,18 +146,20 @@ public struct Cleanup: Sendable {
 
     /// Returns the space freed by the worktrees removed with their branches.
     func cleanBranches(base: String, baseRef: String, trees: [Worktree], log: Logger) async throws -> Int64 {
-        let candidates = try await goneBranches(excluding: base)
-        guard !candidates.isEmpty else {
-            await log("no [gone] branches")
-            return 0
-        }
+        var candidates = try await goneBranches(excluding: base)
+        if candidates.isEmpty { await log("no [gone] branches") }
         let current = await repo.currentBranch()
+        // Checked out but not [gone]: judged by `checkedOutVerdict`.
+        let liveCurrent = current.flatMap { $0 != base && !candidates.contains($0) ? $0 : nil }
+        if let liveCurrent { candidates.append(liveCurrent) }
         let attached = Dictionary(trees.compactMap { tree in tree.branch.map { ($0, tree) } },
                                   uniquingKeysWith: { first, _ in first })
 
         var freed: Int64 = 0
         for branch in candidates {
-            let verdict = await verdict(for: branch, baseRef: baseRef, log: log)
+            let verdict = branch == liveCurrent
+                ? await checkedOutVerdict(for: branch, baseRef: baseRef, log: log)
+                : await verdict(for: branch, baseRef: baseRef, log: log)
             guard case .delete(let reason) = verdict else {
                 if case .keep(let reason) = verdict { await log("\(branch): keep (\(reason))") }
                 continue
