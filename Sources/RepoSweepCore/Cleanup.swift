@@ -13,9 +13,9 @@ import Foundation
 ///
 /// The branch checked out in the main checkout is a candidate too, `[gone]`
 /// or not: a merged PR doesn't always delete its remote branch. Without
-/// `[gone]` it is deleted only when `<base>` holds its commits or an equal
-/// squashed patch, it has no open PR, and it isn't sitting at `<base>`
-/// itself, as a branch just cut from it does.
+/// `[gone]` it is deleted when `<base>` holds an equal squashed patch, or
+/// holds its commits and its PR is MERGED -- a branch just cut from `<base>`
+/// is in `<base>` as well -- and never while a PR for it is open.
 ///
 /// When the branch to delete is the one checked out in the main checkout,
 /// the checkout is first switched to an up-to-date `<base>` -- provided it
@@ -104,21 +104,27 @@ public struct Cleanup: Sendable {
 
     /// The verdict for the checked-out branch when its remote branch is still
     /// there (or it never had one). Like `git-main`, it asks whether `<base>`
-    /// holds the branch's content, not whether a PR merged it.
+    /// holds the branch's content -- but a branch with no commits of its own,
+    /// just cut from `<base>`, is in `<base>` too, so a branch `<base>` holds
+    /// as is also needs a merged PR. An equal squashed patch needs none: a
+    /// branch with nothing of its own never gets that far.
     func checkedOutVerdict(for branch: String, baseRef: String, log: Logger) async -> Verdict {
+        let state: PullRequests.BranchState
         do {
-            if try await lookup(branch) == .open { return .keep("PR still open") }
+            state = try await lookup(branch)
         } catch {
             await log("! \(error.localizedDescription)")
             return .keep("couldn't check its PR")
         }
-        // A merged PR always leaves `<base>` past the branch: GitHub merges
-        // with a new commit. Sitting at `<base>` itself means just cut.
-        if await repo.git("rev-parse", branch).out == (await repo.git("rev-parse", baseRef).out) {
-            return .keep("nothing on it yet")
-        }
+        if state == .open { return .keep("PR still open") }
         if await repo.git("merge-base", "--is-ancestor", branch, baseRef).ok {
-            return .delete("already in \(baseRef)")
+            // At `<base>` itself it has nothing on it yet, whatever an older
+            // PR from a branch of the same name says.
+            if state == .merged,
+               await repo.git("rev-parse", branch).out != (await repo.git("rev-parse", baseRef).out) {
+                return .delete("PR merged, already in \(baseRef)")
+            }
+            return .keep("no merged PR, and nothing of its own that \(baseRef) lacks")
         }
         if await isSquashMerged(branch, into: baseRef) {
             return .delete("an equal patch is in \(baseRef)")

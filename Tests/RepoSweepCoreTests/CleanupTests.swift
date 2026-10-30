@@ -167,18 +167,44 @@ final class LogSink {
         #expect(try await f.git("rev-parse", "main") == (try await f.git("rev-parse", "origin/main")))
     }
 
+    @Test func leavesCheckedOutBranchWhosePRMergedWithMergeCommit() async throws {
+        let f = try await Fixture()
+        defer { f.cleanUp() }
+
+        try await f.branch("feature", file: "feature")
+        try await f.git("merge", "-q", "--no-ff", "-m", "Merge #1", "feature")
+        try await f.git("push", "-q", "origin", "main")
+        try await f.git("switch", "-q", "feature")
+
+        let sink = await LogSink()
+        try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .none }).run(log: sink.logger)
+        #expect(try await f.git("branch", "--show-current") == "feature")
+
+        try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .merged }).run(log: sink.logger)
+        #expect(try await f.git("branch", "--show-current") == "main")
+        #expect(try await f.branches() == ["main"])
+    }
+
     @Test func keepsCheckedOutBranchThatIsNotMerged() async throws {
         let f = try await Fixture()
         defer { f.cleanUp() }
         let sink = await LogSink()
 
-        // Just cut from main: by content it's already in main.
+        // Just cut from main, and main has moved on since: by content it's
+        // already in main.
         try await f.git("switch", "-q", "-c", "fresh")
+        let other = f.dir.appendingPathComponent("other")
+        try await f.sh(f.dir, "clone", "-q", f.origin.path, other.path)
+        try "new".write(to: other.appendingPathComponent("new"), atomically: true, encoding: .utf8)
+        try await f.sh(other, "add", "new")
+        try await f.sh(other, "-c", "user.email=t@e.com", "-c", "user.name=T", "commit", "-q", "-m", "new")
+        try await f.sh(other, "push", "-q", "origin", "main")
         try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .none }).run(log: sink.logger)
         #expect(try await f.git("branch", "--show-current") == "fresh")
 
         // Merged, but with more work committed since.
         try await f.git("switch", "-q", "main")
+        try await f.git("merge", "-q", "--ff-only", "origin/main")
         try await f.branch("feature", file: "feature")
         try await f.git("merge", "-q", "--no-ff", "-m", "Merge #1", "feature")
         try await f.git("push", "-q", "origin", "main")
