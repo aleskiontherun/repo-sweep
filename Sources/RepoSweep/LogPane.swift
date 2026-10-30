@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LogPane: View {
-    @Environment(AppModel.self) private var model
+    @Environment(Workspace.self) private var model
 
     var body: some View {
         VStack(spacing: 0) {

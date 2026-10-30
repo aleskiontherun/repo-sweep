@@ -3,7 +3,7 @@ import RepoSweepCore
 import SwiftUI
 
 struct RepoCard: View {
-    @Environment(AppModel.self) private var model
+    @Environment(Workspace.self) private var model
     let repo: RepoState
 
     var body: some View {

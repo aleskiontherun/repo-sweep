@@ -36,6 +36,12 @@ is its branch.
 
 Tick **Dry run** to see what Cleanup would do without changing anything.
 
+## Tabs
+
+**+** in the toolbar (⌘T) opens a new tab for another working directory.
+Close a tab with the × on hover or ⇧⌘W, and switch with ⇧⌘[ and ⇧⌘]. Open
+tabs and the selected one are restored on the next launch.
+
 ## Repository discovery
 
 Every directory under the working directory that contains a `.git` is a

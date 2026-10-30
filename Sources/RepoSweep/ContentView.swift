@@ -1,9 +1,47 @@
 import RepoSweepCore
 import SwiftUI
 
+/// The window: a tab bar when there is more than one tab, the selected
+/// tab's workspace, and the toolbar shared by all of them.
 struct ContentView: View {
-    @Environment(AppModel.self) private var model
-    @State private var showLog = true
+    @Environment(Tabs.self) private var tabs
+    @AppStorage("showLog") private var showLog = true
+
+    var body: some View {
+        let workspace = tabs.selected
+        VStack(spacing: 0) {
+            if tabs.workspaces.count > 1 {
+                TabBar()
+                Divider()
+            }
+            WorkspaceView(showLog: showLog)
+                .environment(workspace)
+                .id(workspace.id)
+        }
+        .navigationTitle(workspace.root.map { "RepoSweep — \($0.lastPathComponent)" } ?? "RepoSweep")
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    tabs.newTab()
+                } label: {
+                    Label("New Tab", systemImage: "plus")
+                }
+                .help("Open a new tab for another working directory")
+
+                Button {
+                    showLog.toggle()
+                } label: {
+                    Label(showLog ? "Hide Log" : "Show Log", systemImage: "text.alignleft")
+                }
+                .help(showLog ? "Hide the log" : "Show the log")
+            }
+        }
+    }
+}
+
+struct WorkspaceView: View {
+    @Environment(Workspace.self) private var model
+    let showLog: Bool
 
     var body: some View {
         @Bindable var model = model
@@ -19,17 +57,9 @@ struct ContentView: View {
                     .frame(height: 180)
             }
         }
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    showLog.toggle()
-                } label: {
-                    Label(showLog ? "Hide Log" : "Show Log", systemImage: "text.alignleft")
-                }
-                .help(showLog ? "Hide the log" : "Show the log")
-            }
+        .task {
+            if !model.scanned { await model.scan() }
         }
-        .task { await model.scan() }
     }
 
     private var directoryBar: some View {

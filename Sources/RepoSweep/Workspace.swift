@@ -32,30 +32,34 @@ final class RepoState: Identifiable {
     }
 }
 
+/// One tab: a working directory and the repositories under it.
 @MainActor @Observable
-final class AppModel {
-    private static let rootKey = "workingDirectory"
+final class Workspace: Identifiable {
     /// How many repositories are fetched or cleaned at once.
     private static let concurrency = 6
 
+    let id = UUID()
     var root: URL? {
-        didSet { UserDefaults.standard.set(root?.path, forKey: Self.rootKey) }
+        didSet { onRootChange?() }
     }
     var repos: [RepoState] = []
     var log: [LogLine] = []
     var scanning = false
+    /// Set once the first scan has started, so switching back to a tab
+    /// doesn't rescan it.
+    var scanned = false
     var bulkActivity: String?
     var dryRun = false
+    @ObservationIgnored var onRootChange: (() -> Void)?
+
+    var title: String { root?.lastPathComponent ?? "New Tab" }
 
     var missingTools: [String] {
         [("git", Shell.gitPath), ("gh", Shell.ghPath)].compactMap { $0.1 == nil ? $0.0 : nil }
     }
 
-    init() {
-        if let saved = UserDefaults.standard.string(forKey: Self.rootKey),
-           FileManager.default.fileExists(atPath: saved) {
-            root = URL(fileURLWithPath: saved)
-        }
+    init(root: URL? = nil) {
+        self.root = root
     }
 
     func chooseRoot() {
@@ -67,7 +71,9 @@ final class AppModel {
         panel.message = "Choose a folder containing git repositories"
         panel.directoryURL = root
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard url != root else { return }
         root = url
+        repos = []
         Task { await scan() }
     }
 
@@ -75,6 +81,7 @@ final class AppModel {
 
     func scan() async {
         guard let root, !scanning else { return }
+        scanned = true
         scanning = true
         defer { scanning = false }
 

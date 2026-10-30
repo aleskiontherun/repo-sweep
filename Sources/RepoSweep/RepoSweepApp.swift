@@ -4,15 +4,30 @@ import SwiftUI
 @main
 struct RepoSweepApp: App {
     @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
-    @State private var model = AppModel()
+    @State private var tabs = Tabs()
 
     var body: some Scene {
         Window("RepoSweep", id: "main") {
             ContentView()
-                .environment(model)
+                .environment(tabs)
                 .frame(minWidth: 640, minHeight: 480)
         }
         .defaultSize(width: 900, height: 760)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Tab") { tabs.newTab() }
+                    .keyboardShortcut("t")
+                Button("Close Tab") { tabs.close(tabs.selected) }
+                    .keyboardShortcut("w", modifiers: [.command, .shift])
+                    .disabled(tabs.workspaces.count < 2)
+            }
+            CommandGroup(after: .windowArrangement) {
+                Button("Show Previous Tab") { tabs.selectNext(-1) }
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                Button("Show Next Tab") { tabs.selectNext(1) }
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
+            }
+        }
     }
 }
 
