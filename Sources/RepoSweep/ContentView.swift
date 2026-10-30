@@ -10,24 +10,15 @@ struct ContentView: View {
     var body: some View {
         let workspace = tabs.selected
         VStack(spacing: 0) {
-            if tabs.workspaces.count > 1 {
-                TabBar()
-                Divider()
-            }
+            TabBar()
+            Divider()
             WorkspaceView(showLog: showLog)
                 .environment(workspace)
                 .id(workspace.id)
         }
         .navigationTitle(workspace.root.map { "RepoSweep — \($0.lastPathComponent)" } ?? "RepoSweep")
         .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    tabs.newTab()
-                } label: {
-                    Label("New Tab", systemImage: "plus")
-                }
-                .help("Open a new tab for another working directory (⌘T)")
-
+            ToolbarItem {
                 Button {
                     showLog.toggle()
                 } label: {
@@ -51,6 +42,7 @@ struct WorkspaceView: View {
             actionBar(dryRun: $model.dryRun)
             Divider()
             repositoryList
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             if showLog {
                 Divider()
                 LogPane()

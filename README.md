@@ -41,7 +41,7 @@ Tick **Dry run** to see what Cleanup would do without changing anything.
 
 ## Tabs
 
-**+** in the toolbar (⌘T) opens a new tab for another working directory.
+**+** next to the tabs (⌘T) opens a new tab for another working directory.
 ⌘W (or the × on hover) closes the current tab, and the window once it's the
 last one; ⇧⌘[ and ⇧⌘] switch tabs. Open tabs and the selected one are
 restored on the next launch.

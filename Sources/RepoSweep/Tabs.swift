@@ -75,20 +75,51 @@ final class Tabs {
     }
 }
 
+/// Finder-style tabs: a rounded track with the selected tab raised in it,
+/// and a round + button beside it. Always shown, so + is always in reach.
 struct TabBar: View {
     @Environment(Tabs.self) private var tabs
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs.workspaces) { workspace in
-                TabButton(workspace: workspace, selected: workspace.id == tabs.selectedID)
-                if workspace.id != tabs.workspaces.last?.id {
-                    Divider().padding(.vertical, 6)
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(tabs.workspaces) { workspace in
+                    TabButton(workspace: workspace, selected: workspace.id == tabs.selectedID)
                 }
             }
+            .padding(3)
+            .frame(height: 32)
+            .background(Capsule().fill(Color.primary.opacity(0.07)))
+
+            NewTabButton()
         }
-        .frame(height: 28)
-        .background(.bar)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
+private struct NewTabButton: View {
+    @Environment(Tabs.self) private var tabs
+
+    var body: some View {
+        let button = Button {
+            tabs.newTab()
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 30, height: 30)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Open a new tab for another working directory (⌘T)")
+
+        if #available(macOS 26, *) {
+            button.glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            button
+                .background(Circle().fill(Color(nsColor: .controlColor)))
+                .shadow(color: .black.opacity(0.15), radius: 1.5, y: 0.5)
+        }
     }
 }
 
@@ -103,20 +134,22 @@ private struct TabButton: View {
             Text(workspace.title)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 26)
                 .foregroundStyle(selected ? .primary : .secondary)
             HStack {
-                Button {
-                    tabs.close(workspace)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
+                if tabs.workspaces.count > 1 {
+                    Button {
+                        tabs.close(workspace)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .semibold))
+                            .frame(width: 16, height: 16)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Close Tab (⌘W)")
+                    .opacity(hovering ? 1 : 0)
                 }
-                .buttonStyle(.borderless)
-                .help("Close Tab")
-                .opacity(hovering ? 1 : 0)
                 Spacer()
                 if workspace.bulkActivity != nil || workspace.scanning {
                     ProgressView().controlSize(.mini)
@@ -126,8 +159,16 @@ private struct TabButton: View {
         }
         .font(.callout)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(selected ? AnyShapeStyle(.background) : AnyShapeStyle(.clear))
-        .contentShape(Rectangle())
+        .background {
+            if selected {
+                Capsule()
+                    .fill(Color(nsColor: .controlColor))
+                    .shadow(color: .black.opacity(0.12), radius: 1.5, y: 0.5)
+            } else if hovering {
+                Capsule().fill(Color.primary.opacity(0.05))
+            }
+        }
+        .contentShape(Capsule())
         .onTapGesture { tabs.selectedID = workspace.id }
         .onHover { hovering = $0 }
         .help(workspace.root?.path ?? "No working directory selected")
