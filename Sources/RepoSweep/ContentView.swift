@@ -48,6 +48,10 @@ struct WorkspaceView: View {
                 LogPane()
                     .frame(height: 180)
             }
+            if model.root != nil {
+                Divider()
+                statusBar
+            }
         }
         .task {
             if !model.scanned { await model.scan() }
@@ -116,6 +120,31 @@ struct WorkspaceView: View {
         .disabled(model.root == nil || model.bulkActivity != nil)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+
+    /// The working directory's size on disk and the free space left on its
+    /// volume, refreshed after each scan, Update all and Cleanup all.
+    private var statusBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "internaldrive")
+            if let size = model.directorySize {
+                Text("Working directory: \(size, format: .byteCount(style: .file))")
+            } else {
+                Text("Working directory: measuring…")
+            }
+            if model.measuringSize && model.directorySize != nil {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer()
+            if let free = model.freeSpace {
+                Text("\(free, format: .byteCount(style: .file)) free")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .help("Space the working directory takes up on disk, and free space on its volume")
     }
 
     @ViewBuilder

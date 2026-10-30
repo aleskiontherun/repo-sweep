@@ -55,6 +55,12 @@ final class Workspace: Identifiable {
     var scanned = false
     var bulkActivity: String?
     var dryRun = false
+    /// The working directory's size on disk, nil until first measured.
+    var directorySize: Int64?
+    /// Free space on the working directory's volume.
+    var freeSpace: Int64?
+    var measuringSize = false
+    @ObservationIgnored private var measurement: Task<Void, Never>?
     @ObservationIgnored var onRootChange: (() -> Void)?
 
     var title: String { root?.lastPathComponent ?? "New Tab" }
@@ -79,6 +85,8 @@ final class Workspace: Identifiable {
         guard url != root else { return }
         root = url
         repos = []
+        directorySize = nil
+        freeSpace = nil
         Task { await scan() }
     }
 
@@ -88,9 +96,33 @@ final class Workspace: Identifiable {
     /// requests, without fetching.
     func scan() async {
         guard await discover() else { return }
+        measureDisk()
         await forEach(orderedRepos) { repo in
             await self.refreshLocal(repo)
             await self.refreshPRs(repo)
+        }
+    }
+
+    /// Re-measures the working directory's size and the free space beside
+    /// it, off the main actor. A measurement still running is cancelled, so
+    /// the figures shown are always the latest root's.
+    func measureDisk() {
+        measurement?.cancel()
+        guard let root else { return }
+        measuringSize = true
+        measurement = Task {
+            let walk = Task.detached(priority: .utility) {
+                (DiskUsage.allocatedSize(of: root), DiskUsage.freeSpace(at: root))
+            }
+            let measured = await withTaskCancellationHandler {
+                await walk.value
+            } onCancel: {
+                walk.cancel()
+            }
+            guard !Task.isCancelled, root == self.root else { return }
+            if let size = measured.0 { directorySize = size }
+            freeSpace = measured.1
+            measuringSize = false
         }
     }
 
@@ -169,6 +201,7 @@ final class Workspace: Identifiable {
         await discover()
         await forEach(orderedRepos) { await self.update($0) }
         append(nil, "Update all finished")
+        measureDisk()
     }
 
     func cleanupAll() async {
@@ -177,6 +210,7 @@ final class Workspace: Identifiable {
         defer { bulkActivity = nil }
         await forEach(orderedRepos) { await self.cleanup($0) }
         append(nil, dryRun ? "Cleanup all finished (dry run, nothing deleted)" : "Cleanup all finished")
+        if !dryRun { measureDisk() }
     }
 
     func update(_ repo: RepoState) async {
