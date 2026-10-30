@@ -1,0 +1,70 @@
+# RepoSweep
+
+A small macOS app for keeping a folder full of git checkouts tidy. Pick a
+working directory, and RepoSweep lists every repository under it, with a link
+to each one on GitHub and its open pull requests underneath.
+
+- **Update** — `git fetch --prune`, then a fast-forward-only `git pull` of the
+  checked-out branch, then reload the pull request list.
+- **Cleanup** — delete local branches whose work has actually landed, and
+  the worktrees left behind with them.
+- **Update all / Cleanup all** do the same for every repository, a few at a
+  time.
+
+## What Cleanup deletes
+
+A branch marked `[gone]` (its remote branch was deleted) is only a candidate:
+that alone doesn't mean it was merged. For each candidate RepoSweep asks
+GitHub (`gh pr list --head <branch>`):
+
+| PR for the branch | Result |
+| --- | --- |
+| merged | deleted |
+| open (e.g. a stacked PR) | kept |
+| none, but its commits or an equal squashed patch are in the default branch | deleted |
+| none, and not in the default branch | kept, reported for manual review |
+
+If the branch to delete is the one checked out, RepoSweep switches the
+checkout to the default branch, fast-forwards it to `origin`, then deletes the
+branch, but only when there are no local changes.
+
+Worktrees: stale registrations are pruned; a worktree on a deleted branch is
+removed along with it; a detached worktree whose commit is already in the
+default branch is removed. Nothing is ever removed with `--force`. A locked
+worktree, or one with uncommitted work, is kept and named in the log, and so
+is its branch.
+
+Tick **Dry run** to see what Cleanup would do without changing anything.
+
+## Repository discovery
+
+Every directory under the working directory that contains a `.git` is a
+repository; the search doesn't go inside a repository. If the working
+directory is itself a repository, paths it ignores are skipped. Linked
+worktrees are left out of the list, because cleaning up their main checkout
+handles them.
+
+## Requirements
+
+- macOS 14 or later
+- `git` and the [GitHub CLI](https://cli.github.com) (`gh auth login`), in
+  `/opt/homebrew/bin`, `/usr/local/bin` or `/usr/bin`
+
+## Build
+
+```bash
+./scripts/build-app.sh            # builds build/RepoSweep.app
+./scripts/build-app.sh --install  # and copies it to /Applications
+```
+
+The app is ad-hoc signed and not notarized, so it's meant to be built
+locally. For development:
+
+```bash
+swift run RepoSweep
+swift test
+```
+
+## License
+
+MIT
