@@ -49,7 +49,7 @@ public struct Cleanup: Sendable {
 
     @discardableResult
     public func run(log: Logger) async throws -> Int64 {
-        try await repo.gitChecked("fetch", "--prune")
+        try await repo.fetchPrune(log: log)
         let prune = await repo.git(dryRun ? ["worktree", "prune", "-n", "-v"] : ["worktree", "prune", "-v"])
         for line in (prune.stdout + prune.stderr).split(separator: "\n") {
             await log(String(line))
