@@ -67,8 +67,10 @@ handles them.
 ./scripts/build-app.sh --install  # and copies it to /Applications
 ```
 
-The icon is drawn by `scripts/make-icon.swift`, which writes
-`Resources/AppIcon.icns`; rerun it after changing the drawing.
+The icon is a Liquid Glass icon, `Resources/AppIcon.icon`, made of SVG
+layers; edit it in Icon Composer (bundled with Xcode). `build-app.sh` compiles
+it with `actool`, so building needs Xcode rather than just the command line
+tools. `Resources/AppIcon.png` is a rendered preview for this README.
 
 The app is ad-hoc signed and not notarized, so it's meant to be built
 locally. For development:

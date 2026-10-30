@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Lines stop at the rim of each node (r=84): the nodes are translucent
+       glass, and a line running under one would show through it. -->
+  <g transform="translate(24 0)" fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="butt">
+    <path d="M392 378 V646"/>
+    <path d="M392 646 C392 540 632 572 632 466"/>
+  </g>
+</svg>
