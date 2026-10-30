@@ -83,6 +83,15 @@ swift run RepoSweep
 swift test
 ```
 
+## Contributing
+
+Pull requests are squash-merged, so a PR's title becomes the commit subject
+on `main`, and CI checks it is a conventional commit subject:
+`<type>[(scope)][!]: <description>`, with type one of `feat`, `fix`,
+`refactor`, `docs`, `test`, `chore`, `perf`, `ci`, `build` or `revert`. CI
+also runs `swift test`, builds the app with `build-app.sh` and lints the
+scripts with ShellCheck; all of it has to pass before a PR can merge.
+
 ## License
 
 MIT

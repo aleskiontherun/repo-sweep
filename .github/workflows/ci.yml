@@ -1,0 +1,68 @@
+name: CI
+
+# Not path-filtered on purpose: the jobs below are required checks on `main`, and a
+# required check has to have passed on the PR's latest head SHA. A filtered workflow that
+# skips leaves the PR waiting for a status that never arrives.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# A new push to a PR cancels the run still going for the previous one: the macOS job is
+# the expensive one, and only the newest head's result can count. Runs on `main` are
+# never cancelled, so every commit there keeps its own result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every job only reads the repository. `persist-credentials: false` keeps the token out of
+# `.git/config` in a workspace that then builds and runs this repository's code.
+permissions:
+  contents: read
+
+# The job ids are the check names `main`'s ruleset requires. Renaming a job, or giving it
+# a matrix (which appends the matrix value to the check name), means editing the ruleset
+# in the same breath, or every PR waits for a check that never reports.
+jobs:
+  # The tests, then the app bundle the way `scripts/build-app.sh` makes it locally. The
+  # Xcode is named rather than left to the image's default: compiling the Icon Composer
+  # icon with `actool` needs Xcode 26 or later.
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Test
+        run: swift test
+
+      - name: Build the app
+        run: scripts/build-app.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The image rather than the runner's own shellcheck, which is pinned to whatever
+      # that image generation shipped and reports findings a current one does not.
+      - name: Lint the scripts
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable --version
+          docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable scripts/*.sh
