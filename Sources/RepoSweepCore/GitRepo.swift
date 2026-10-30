@@ -138,14 +138,29 @@ public struct GitRepo: Sendable, Hashable {
         return status
     }
 
+    /// `git fetch --prune`, tried again when another git is writing the same
+    /// remote-tracking refs. An IDE or another app fetching in the background
+    /// -- most likely right after a merge, when everything fetches -- makes
+    /// ours fail with "cannot lock ref": it found the ref locked, or moved
+    /// between reading and writing it. Waiting for the other fetch to finish
+    /// and fetching again is all it takes.
+    func fetchPrune(log: Logger, attempts: Int = 3, retryDelay: Duration = .seconds(1)) async throws {
+        for attempt in 1...attempts {
+            let fetch = await git("fetch", "--prune")
+            if fetch.ok { return }
+            guard attempt < attempts, fetch.stderr.contains("cannot lock ref") else {
+                throw ShellError(message: "git fetch --prune failed: \(fetch.err)")
+            }
+            await log("another git is updating origin's refs, fetching again")
+            try await Task.sleep(for: retryDelay * attempt)
+        }
+    }
+
     /// `git fetch --prune`, then a fast-forward-only pull of the checked-out
     /// branch. Fast-forward only, so an update never invents a merge commit
     /// or stops halfway through a rebase in a repository nobody is looking at.
     public func update(log: Logger) async throws {
-        let fetch = await git("fetch", "--prune")
-        guard fetch.ok else {
-            throw ShellError(message: "fetch failed: \(fetch.err)")
-        }
+        try await fetchPrune(log: log)
         await log("fetched")
 
         guard let branch = await currentBranch() else {

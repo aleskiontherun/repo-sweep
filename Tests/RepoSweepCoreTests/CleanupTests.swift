@@ -285,6 +285,48 @@ final class LogSink {
         #expect(await f.repo.status().behind == 0)
     }
 
+    /// Another git fetching at the same moment -- an IDE, right after a merge
+    /// -- holds the lock on `origin/main` that ours needs.
+    @Test func fetchWaitsOutAnotherFetchHoldingTheRefLock() async throws {
+        let f = try await Fixture()
+        defer { f.cleanUp() }
+
+        let other = f.dir.appendingPathComponent("other")
+        try await f.sh(f.dir, "clone", "-q", f.origin.path, other.path)
+        try await f.sh(other, "-c", "user.email=t@e.com", "-c", "user.name=T", "commit", "-q", "--allow-empty", "-m", "merged")
+        try await f.sh(other, "push", "-q", "origin", "main")
+
+        let lock = f.clone.appendingPathComponent(".git/refs/remotes/origin/main.lock")
+        try "".write(to: lock, atomically: false, encoding: .utf8)
+        let sink = await LogSink()
+        let record = await sink.logger
+        // The other fetch finishes as ours backs off.
+        let logger: Logger = { line in
+            record(line)
+            if line.contains("fetching again") { try? FileManager.default.removeItem(at: lock) }
+        }
+        try await Cleanup(repo: f.repo, dryRun: true, lookup: { _ in .none }).run(log: logger)
+        #expect(await sink.lines.filter { $0.contains("fetching again") }.count == 1)
+        #expect(try await f.git("rev-parse", "origin/main") == (try await f.sh(other, "rev-parse", "HEAD")))
+    }
+
+    @Test func fetchGivesUpOnARefLockThatStaysHeld() async throws {
+        let f = try await Fixture()
+        defer { f.cleanUp() }
+
+        try await f.git("commit", "-q", "--allow-empty", "-m", "ahead")
+        try await f.git("push", "-q", "origin", "main")
+        try await f.git("update-ref", "refs/remotes/origin/main", "HEAD~1")
+        try "".write(to: f.clone.appendingPathComponent(".git/refs/remotes/origin/main.lock"),
+                     atomically: false, encoding: .utf8)
+
+        let sink = await LogSink()
+        await #expect(throws: ShellError.self) {
+            try await f.repo.fetchPrune(log: sink.logger, retryDelay: .milliseconds(10))
+        }
+        #expect(await sink.lines.filter { $0.contains("fetching again") }.count == 2)
+    }
+
     @Test func discoveryFindsNestedReposAndSkipsWorktrees() async throws {
         let f = try await Fixture()
         defer { f.cleanUp() }

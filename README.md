@@ -7,7 +7,8 @@ working directory, and RepoSweep lists every repository under it, with a link
 to each one on GitHub and its open pull requests underneath.
 
 - **Update** — `git fetch --prune`, then a fast-forward-only `git pull` of the
-  checked-out branch, then reload the pull request list.
+  checked-out branch, then reload the pull request list. A fetch that loses a
+  race with another git fetching the same repository (an IDE, say) is retried.
 - **Cleanup** — delete local branches whose work has actually landed, and
   the worktrees left behind with them.
 - **Update all** (⌘R) first rescans the working directory, so repositories
