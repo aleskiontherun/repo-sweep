@@ -190,6 +190,14 @@ final class LogSink {
         defer { f.cleanUp() }
         let sink = await LogSink()
 
+        // Just cut from main, under the name of an older branch whose PR was
+        // merged.
+        try await f.git("switch", "-q", "-c", "fresh")
+        try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .merged }).run(log: sink.logger)
+        #expect(try await f.git("branch", "--show-current") == "fresh")
+        try await f.git("switch", "-q", "main")
+        try await f.git("branch", "-q", "-D", "fresh")
+
         // Just cut from main, and main has moved on since: by content it's
         // already in main.
         try await f.git("switch", "-q", "-c", "fresh")

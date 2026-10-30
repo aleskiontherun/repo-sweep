@@ -120,10 +120,10 @@ public struct Cleanup: Sendable {
         if await repo.git("merge-base", "--is-ancestor", branch, baseRef).ok {
             // At `<base>` itself it has nothing on it yet, whatever an older
             // PR from a branch of the same name says.
-            if state == .merged,
-               await repo.git("rev-parse", branch).out != (await repo.git("rev-parse", baseRef).out) {
-                return .delete("PR merged, already in \(baseRef)")
+            if await repo.git("rev-parse", branch).out == (await repo.git("rev-parse", baseRef).out) {
+                return .keep("nothing on it yet, it sits at \(baseRef)")
             }
+            if state == .merged { return .delete("PR merged, already in \(baseRef)") }
             return .keep("no merged PR, and nothing of its own that \(baseRef) lacks")
         }
         if await isSquashMerged(branch, into: baseRef) {
