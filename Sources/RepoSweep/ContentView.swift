@@ -96,11 +96,7 @@ struct WorkspaceView: View {
             Button {
                 Task { await model.cleanupAll() }
             } label: {
-                Label {
-                    Text("Cleanup all")
-                } icon: {
-                    BroomIcon()
-                }
+                Label("Cleanup all", systemImage: "sparkles")
             }
             .help("Delete local branches that were merged, in every repository (⇧⌘K)")
 
