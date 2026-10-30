@@ -17,9 +17,28 @@ struct RepoSweepApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Tab") { tabs.newTab() }
                     .keyboardShortcut("t")
-                Button("Close Tab") { tabs.close(tabs.selected) }
+            }
+            // Replaces the stock Close (⌘W), so ⌘W closes a tab first and
+            // only the last tab closes the window, as in a browser.
+            CommandGroup(replacing: .saveItem) {
+                Button(tabs.workspaces.count > 1 ? "Close Tab" : "Close Window") {
+                    if tabs.workspaces.count > 1 {
+                        tabs.close(tabs.selected)
+                    } else {
+                        NSApp.keyWindow?.performClose(nil)
+                    }
+                }
+                .keyboardShortcut("w")
+                Button("Close Window") { NSApp.keyWindow?.performClose(nil) }
                     .keyboardShortcut("w", modifiers: [.command, .shift])
-                    .disabled(tabs.workspaces.count < 2)
+            }
+            CommandMenu("Repositories") {
+                let workspace = tabs.selected
+                Button("Update All") { Task { await workspace.updateAll() } }
+                    .keyboardShortcut("r")
+                Button("Cleanup All") { Task { await workspace.cleanupAll() } }
+                Divider()
+                Button("Rescan Without Fetching") { Task { await workspace.scan() } }
             }
             CommandGroup(after: .windowArrangement) {
                 Button("Show Previous Tab") { tabs.selectNext(-1) }

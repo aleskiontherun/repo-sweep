@@ -8,8 +8,9 @@ to each one on GitHub and its open pull requests underneath.
   checked-out branch, then reload the pull request list.
 - **Cleanup** — delete local branches whose work has actually landed, and
   the worktrees left behind with them.
-- **Update all / Cleanup all** do the same for every repository, a few at a
-  time.
+- **Update all** (⌘R) first rescans the working directory, so repositories
+  added or deleted since the last look join or leave the list, then updates
+  every one, a few at a time. **Cleanup all** cleans up every one.
 
 ## What Cleanup deletes
 
@@ -39,8 +40,9 @@ Tick **Dry run** to see what Cleanup would do without changing anything.
 ## Tabs
 
 **+** in the toolbar (⌘T) opens a new tab for another working directory.
-Close a tab with the × on hover or ⇧⌘W, and switch with ⇧⌘[ and ⇧⌘]. Open
-tabs and the selected one are restored on the next launch.
+⌘W (or the × on hover) closes the current tab, and the window once it's the
+last one; ⇧⌘[ and ⇧⌘] switch tabs. Open tabs and the selected one are
+restored on the next launch.
 
 ## Repository discovery
 

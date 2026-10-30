@@ -26,7 +26,7 @@ struct ContentView: View {
                 } label: {
                     Label("New Tab", systemImage: "plus")
                 }
-                .help("Open a new tab for another working directory")
+                .help("Open a new tab for another working directory (⌘T)")
 
                 Button {
                     showLog.toggle()
@@ -91,7 +91,7 @@ struct WorkspaceView: View {
             } label: {
                 Label("Update all", systemImage: "arrow.triangle.2.circlepath")
             }
-            .help("Fetch with prune and pull every repository, then reload pull requests")
+            .help("Rescan the folder, fetch with prune and pull every repository, then reload pull requests (⌘R)")
 
             Button {
                 Task { await model.cleanupAll() }

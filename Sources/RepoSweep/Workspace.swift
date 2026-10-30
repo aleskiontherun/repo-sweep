@@ -79,21 +79,45 @@ final class Workspace: Identifiable {
 
     // MARK: Scanning
 
+    /// Rediscovers the repositories and reloads each one's status and pull
+    /// requests, without fetching.
     func scan() async {
-        guard let root, !scanning else { return }
+        guard await discover() else { return }
+        await forEach(repos) { repo in
+            await self.refreshLocal(repo)
+            await self.refreshPRs(repo)
+        }
+    }
+
+    /// Re-reads which repositories are under the root: ones added since the
+    /// last look join the list, deleted ones leave it, and the rest keep
+    /// their state. Returns false when there is no root, or another
+    /// discovery is already running.
+    @discardableResult
+    func discover() async -> Bool {
+        guard let root, !scanning else { return false }
         scanned = true
         scanning = true
         defer { scanning = false }
 
         let paths = await Discovery.repositories(under: root)
-        let existing = Dictionary(uniqueKeysWithValues: repos.map { ($0.git.path, $0) })
-        repos = paths
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
-            .map { path in existing[path] ?? RepoState(path: path, name: label(for: path, under: root)) }
-        await forEach(repos) { repo in
-            await self.refreshLocal(repo)
-            await self.refreshPRs(repo)
+        let hadList = !repos.isEmpty
+        let existing = Dictionary(uniqueKeysWithValues: repos.map { ($0.git.path, $0) })
+        let updated = paths.map { path in
+            existing[path] ?? RepoState(path: path, name: label(for: path, under: root))
         }
+        if hadList {
+            let kept = Set(paths)
+            for repo in updated where existing[repo.git.path] == nil {
+                append(repo.name, "new repository")
+            }
+            for repo in repos where !kept.contains(repo.git.path) {
+                append(repo.name, "repository no longer there, removed from the list")
+            }
+        }
+        repos = updated
+        return true
     }
 
     private func label(for path: URL, under root: URL) -> String {
@@ -132,7 +156,12 @@ final class Workspace: Identifiable {
         guard bulkActivity == nil else { return }
         bulkActivity = "Updating…"
         defer { bulkActivity = nil }
-        await scan()
+        // Let a discovery already in flight (the first one, on opening the
+        // tab) finish, then look again so the list is current.
+        while scanning {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        await discover()
         await forEach(repos) { await self.update($0) }
         append(nil, "Update all finished")
     }
