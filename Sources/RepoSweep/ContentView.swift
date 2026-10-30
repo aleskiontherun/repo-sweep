@@ -140,7 +140,7 @@ struct WorkspaceView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(model.repos) { repo in
+                    ForEach(model.orderedRepos) { repo in
                         RepoCard(repo: repo)
                     }
                 }

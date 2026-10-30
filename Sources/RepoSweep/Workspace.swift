@@ -43,6 +43,11 @@ final class Workspace: Identifiable {
         didSet { onRootChange?() }
     }
     var repos: [RepoState] = []
+    /// `repos` as listed: pinned ones first, each group in path order.
+    var orderedRepos: [RepoState] {
+        let pins = Pins.shared
+        return repos.filter { pins.isPinned($0.git.path) } + repos.filter { !pins.isPinned($0.git.path) }
+    }
     var log: [LogLine] = []
     var scanning = false
     /// Set once the first scan has started, so switching back to a tab
@@ -83,7 +88,7 @@ final class Workspace: Identifiable {
     /// requests, without fetching.
     func scan() async {
         guard await discover() else { return }
-        await forEach(repos) { repo in
+        await forEach(orderedRepos) { repo in
             await self.refreshLocal(repo)
             await self.refreshPRs(repo)
         }
@@ -162,7 +167,7 @@ final class Workspace: Identifiable {
             try? await Task.sleep(for: .milliseconds(100))
         }
         await discover()
-        await forEach(repos) { await self.update($0) }
+        await forEach(orderedRepos) { await self.update($0) }
         append(nil, "Update all finished")
     }
 
@@ -170,7 +175,7 @@ final class Workspace: Identifiable {
         guard bulkActivity == nil else { return }
         bulkActivity = dryRun ? "Cleaning up (dry run)…" : "Cleaning up…"
         defer { bulkActivity = nil }
-        await forEach(repos) { await self.cleanup($0) }
+        await forEach(orderedRepos) { await self.cleanup($0) }
         append(nil, dryRun ? "Cleanup all finished (dry run, nothing deleted)" : "Cleanup all finished")
     }
 

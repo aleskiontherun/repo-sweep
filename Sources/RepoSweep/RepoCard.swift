@@ -29,7 +29,27 @@ struct RepoCard: View {
             if let github = repo.github {
                 Button("Open on GitHub") { NSWorkspace.shared.open(github.url) }
             }
+            Divider()
+            Button(pinned ? "Unpin" : "Pin to Top", action: togglePin)
         }
+    }
+
+    private var pinned: Bool { Pins.shared.isPinned(repo.git.path) }
+
+    private func togglePin() {
+        withAnimation(.snappy) { Pins.shared.toggle(repo.git.path) }
+    }
+
+    private var pinButton: some View {
+        Button(action: togglePin) {
+            Image(systemName: pinned ? "pin.fill" : "pin")
+                .rotationEffect(.degrees(45))
+                .foregroundStyle(pinned ? Color.orange : Color.secondary)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(pinned ? "Unpin" : "Pin to the top")
     }
 
     private var header: some View {
@@ -66,13 +86,16 @@ struct RepoCard: View {
                     .help(result.text)
                     .frame(maxWidth: 260, alignment: .trailing)
             }
-            Button("Update") { Task { await model.update(repo) } }
-                .help("Fetch with prune, pull, and reload pull requests")
-            Button("Cleanup") { Task { await model.cleanup(repo) } }
-                .help(model.dryRun ? "Report merged branches without deleting them"
-                                   : "Delete local branches that were merged")
+            Group {
+                Button("Update") { Task { await model.update(repo) } }
+                    .help("Fetch with prune, pull, and reload pull requests")
+                Button("Cleanup") { Task { await model.cleanup(repo) } }
+                    .help(model.dryRun ? "Report merged branches without deleting them"
+                                       : "Delete local branches that were merged")
+            }
+            .disabled(repo.activity != nil)
+            pinButton
         }
-        .disabled(repo.activity != nil)
     }
 
     private var branchLine: some View {
