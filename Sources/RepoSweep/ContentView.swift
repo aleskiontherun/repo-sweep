@@ -126,26 +126,31 @@ struct WorkspaceView: View {
     /// volume, refreshed after each scan, update and cleanup.
     private var statusBar: some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder")
-            if let size = model.directorySize {
-                Text(size, format: .byteCount(style: .file))
-            } else {
-                Text("measuring…")
+            HStack(spacing: 6) {
+                Image(systemName: "folder")
+                if let size = model.directorySize {
+                    Text(size, format: .byteCount(style: .file))
+                } else {
+                    Text("measuring…")
+                }
+                if model.measuringSize && model.directorySize != nil {
+                    ProgressView().controlSize(.mini)
+                }
             }
-            if model.measuringSize && model.directorySize != nil {
-                ProgressView().controlSize(.mini)
-            }
+            .help("Space the working directory takes up on disk")
             Spacer()
             if let free = model.freeSpace {
-                Image(systemName: "internaldrive")
-                Text("\(free, format: .byteCount(style: .file)) free")
+                HStack(spacing: 6) {
+                    Image(systemName: "internaldrive")
+                    Text("\(free, format: .byteCount(style: .file)) free")
+                }
+                .help("Free space on the volume holding the working directory")
             }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
-        .help("Space the working directory takes up on disk, and free space on its volume")
     }
 
     @ViewBuilder
