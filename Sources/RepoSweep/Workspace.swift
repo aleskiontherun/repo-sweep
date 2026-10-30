@@ -137,25 +137,6 @@ final class Workspace: Identifiable {
         }
     }
 
-    /// Re-measures one repository after an update or cleanup of it alone,
-    /// and moves the working directory's total by as much as it changed,
-    /// rather than walking the whole working directory again.
-    private func measure(_ repo: RepoState) async {
-        guard let root else { return }
-        let path = repo.git.path
-        let measured = await Task.detached(priority: .utility) {
-            (DiskUsage.allocatedSize(of: path), DiskUsage.freeSpace(at: root))
-        }.value
-        guard root == self.root else { return }
-        if let size = measured.0 {
-            if let old = repo.size, let total = directorySize {
-                directorySize = total + size - old
-            }
-            repo.size = size
-        }
-        freeSpace = measured.1
-    }
-
     /// Re-reads which repositories are under the root: ones added since the
     /// last look join the list, deleted ones leave it, and the rest keep
     /// their state. Returns false when there is no root, or another
@@ -251,7 +232,10 @@ final class Workspace: Identifiable {
             return "Updated"
         }
         await refreshPRs(repo)
-        if bulkActivity == nil { await measure(repo) }
+        // A bulk action measures once, when it's done. The whole working
+        // directory is walked again rather than just this repository: its
+        // nested repositories and removed worktrees count elsewhere.
+        if bulkActivity == nil { measureDisk() }
     }
 
     func cleanup(_ repo: RepoState) async {
@@ -264,7 +248,7 @@ final class Workspace: Identifiable {
             if freed > 0 || self.bulkActivity == nil { self.append(repo.name, "freed \(Self.bytes(freed))") }
             return "Cleaned up, freed \(Self.bytes(freed))"
         }
-        if bulkActivity == nil { await measure(repo) }
+        if bulkActivity == nil { measureDisk() }
     }
 
     /// Runs `body`, which returns the text to show when it succeeds.
