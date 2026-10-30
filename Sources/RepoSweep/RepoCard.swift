@@ -107,6 +107,10 @@ struct RepoCard: View {
             if status.dirty {
                 Text("modified").foregroundStyle(.orange).help("The checkout has uncommitted changes")
             }
+            if let size = repo.size {
+                Label(size.formatted(.byteCount(style: .file)), systemImage: "folder")
+                    .help("Space the repository takes up on disk")
+            }
         }
         .font(.callout)
         .foregroundStyle(.secondary)

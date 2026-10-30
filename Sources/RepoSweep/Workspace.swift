@@ -23,6 +23,8 @@ final class RepoState: Identifiable {
     var activity: String?
     /// The outcome of the last update or cleanup.
     var result: (text: String, isError: Bool)?
+    /// The repository's size on disk, nil until first measured.
+    var size: Int64?
 
     nonisolated var id: URL { git.path }
 
@@ -60,6 +62,8 @@ final class Workspace: Identifiable {
     /// Free space on the working directory's volume.
     var freeSpace: Int64?
     var measuringSize = false
+    /// What the Cleanup all running now has freed so far.
+    @ObservationIgnored private var freedByCleanupAll: Int64 = 0
     @ObservationIgnored private var measurement: Task<Void, Never>?
     @ObservationIgnored var onRootChange: (() -> Void)?
 
@@ -103,16 +107,20 @@ final class Workspace: Identifiable {
         }
     }
 
-    /// Re-measures the working directory's size and the free space beside
-    /// it, off the main actor. A measurement still running is cancelled, so
-    /// the figures shown are always the latest root's.
+    /// Re-measures the working directory's size, each repository's share of
+    /// it and the free space beside it, in one walk off the main actor. A
+    /// measurement still running is cancelled, so the figures shown are
+    /// always the latest root's.
     func measureDisk() {
         measurement?.cancel()
         guard let root else { return }
+        let paths = repos.map(\.git.path)
+        // Free space is cheap to read, so it doesn't wait for the walk.
+        freeSpace = DiskUsage.freeSpace(at: root)
         measuringSize = true
         measurement = Task {
             let walk = Task.detached(priority: .utility) {
-                (DiskUsage.allocatedSize(of: root), DiskUsage.freeSpace(at: root))
+                (DiskUsage.allocatedSizes(of: root, splitBy: paths), DiskUsage.freeSpace(at: root))
             }
             let measured = await withTaskCancellationHandler {
                 await walk.value
@@ -120,7 +128,12 @@ final class Workspace: Identifiable {
                 walk.cancel()
             }
             guard !Task.isCancelled, root == self.root else { return }
-            if let size = measured.0 { directorySize = size }
+            if let sizes = measured.0 {
+                directorySize = sizes.total
+                for repo in repos {
+                    if let size = sizes.subdirs[repo.git.path] { repo.size = size }
+                }
+            }
             freeSpace = measured.1
             measuringSize = false
         }
@@ -208,34 +221,46 @@ final class Workspace: Identifiable {
         guard bulkActivity == nil else { return }
         bulkActivity = dryRun ? "Cleaning up (dry run)…" : "Cleaning up…"
         defer { bulkActivity = nil }
+        freedByCleanupAll = 0
         await forEach(orderedRepos) { await self.cleanup($0) }
-        append(nil, dryRun ? "Cleanup all finished (dry run, nothing deleted)" : "Cleanup all finished")
-        if !dryRun { measureDisk() }
+        append(nil, dryRun ? "Cleanup all finished (dry run, nothing deleted)"
+                           : "Cleanup all finished, freed \(Self.bytes(freedByCleanupAll))")
+        measureDisk()
     }
 
     func update(_ repo: RepoState) async {
-        await perform("Updating…", on: repo, success: "Updated") {
+        await perform("Updating…", on: repo) {
             try await repo.git.update(log: self.logger(for: repo))
+            return "Updated"
         }
         await refreshPRs(repo)
+        // A bulk action measures once, when it's done. The whole working
+        // directory is walked again rather than just this repository: its
+        // nested repositories and removed worktrees count elsewhere.
+        if bulkActivity == nil { measureDisk() }
     }
 
     func cleanup(_ repo: RepoState) async {
         let dryRun = dryRun
-        await perform(dryRun ? "Cleaning up (dry run)…" : "Cleaning up…", on: repo,
-                      success: dryRun ? "Cleanup dry run done" : "Cleaned up") {
-            try await Cleanup(repo: repo.git, dryRun: dryRun).run(log: self.logger(for: repo))
+        await perform(dryRun ? "Cleaning up (dry run)…" : "Cleaning up…", on: repo) {
+            let freed = try await Cleanup(repo: repo.git, dryRun: dryRun).run(log: self.logger(for: repo))
+            if dryRun { return "Cleanup dry run done" }
+            self.freedByCleanupAll += freed
+            // Cleanup all sums them up, so only the repositories that freed something get a line.
+            if freed > 0 || self.bulkActivity == nil { self.append(repo.name, "freed \(Self.bytes(freed))") }
+            return "Cleaned up, freed \(Self.bytes(freed))"
         }
+        if bulkActivity == nil { measureDisk() }
     }
 
-    private func perform(_ activity: String, on repo: RepoState, success: String,
-                         _ body: () async throws -> Void) async {
+    /// Runs `body`, which returns the text to show when it succeeds.
+    private func perform(_ activity: String, on repo: RepoState,
+                         _ body: () async throws -> String) async {
         guard repo.activity == nil else { return }
         repo.activity = activity
         defer { repo.activity = nil }
         do {
-            try await body()
-            repo.result = (success, false)
+            repo.result = (try await body(), false)
         } catch {
             repo.result = (error.localizedDescription, true)
             append(repo.name, error.localizedDescription, isError: true)
@@ -244,6 +269,10 @@ final class Workspace: Identifiable {
     }
 
     // MARK: Helpers
+
+    static func bytes(_ count: Int64) -> String {
+        count.formatted(.byteCount(style: .file))
+    }
 
     private func logger(for repo: RepoState) -> Logger {
         let name = repo.name

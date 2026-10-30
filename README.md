@@ -15,8 +15,9 @@ to each one on GitHub and its open pull requests underneath.
   every one, a few at a time. **Cleanup all** (⇧⌘K) cleans up every one.
 
 The status bar at the bottom shows how much space the working directory takes
-up on disk and how much is free on its volume, measured again after every
-scan, **Update all** and **Cleanup all**.
+up on disk and how much is free on its volume, and each repository shows its
+own size. All of it is measured again after every scan, update and cleanup.
+Cleanup logs the space it freed: the size of each worktree it removed.
 
 Pin a repository (the pin button, or right-click) to keep it at the top of
 the list. Pins are saved, and shared by every tab that lists the repository.

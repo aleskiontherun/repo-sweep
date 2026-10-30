@@ -172,10 +172,12 @@ final class LogSink {
         try await f.git("worktree", "add", "-q", cleanTree.path, "clean")
         try await f.git("worktree", "add", "-q", dirtyTree.path, "dirty")
         try "wip".write(to: dirtyTree.appendingPathComponent("wip"), atomically: true, encoding: .utf8)
+        let cleanSize = try #require(DiskUsage.allocatedSize(of: cleanTree))
 
         let sink = await LogSink()
-        try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .merged }).run(log: sink.logger)
+        let freed = try await Cleanup(repo: f.repo, dryRun: false, lookup: { _ in .merged }).run(log: sink.logger)
 
+        #expect(freed == cleanSize)
         #expect(!FileManager.default.fileExists(atPath: cleanTree.path))
         #expect(FileManager.default.fileExists(atPath: dirtyTree.path))
         #expect(try await f.branches() == ["main", "dirty"])
