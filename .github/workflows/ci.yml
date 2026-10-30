@@ -11,9 +11,11 @@ on:
 
 # A new push to a PR cancels the run still going for the previous one: the macOS job is
 # the expensive one, and only the newest head's result can count. Runs on `main` are
-# never cancelled, so every commit there keeps its own result.
+# grouped by commit rather than by ref, because a group holds one running and one pending
+# run and a third push would cancel the pending one; so every commit there keeps its own
+# result.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Every job only reads the repository. `persist-credentials: false` keeps the token out of
