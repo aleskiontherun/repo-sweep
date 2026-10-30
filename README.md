@@ -35,6 +35,11 @@ GitHub (`gh pr list --head <branch>`):
 | none, but its commits or an equal squashed patch are in the default branch | deleted |
 | none, and not in the default branch | kept, reported for manual review |
 
+The checked-out branch is a candidate even when it isn't `[gone]`, since a
+merged PR doesn't always delete its remote branch. It is deleted when the
+default branch holds its commits or an equal squashed patch, unless it has an
+open PR or still sits exactly where the default branch is (just cut from it).
+
 If the branch to delete is the one checked out, RepoSweep switches the
 checkout to the default branch, fast-forwards it to `origin`, then deletes the
 branch, but only when there are no local changes.

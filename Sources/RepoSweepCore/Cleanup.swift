@@ -11,6 +11,12 @@ import Foundation
 /// all is deleted only if `<base>` already contains its commits or an
 /// equivalent squashed patch, and reported for manual review otherwise.
 ///
+/// The branch checked out in the main checkout is a candidate too, `[gone]`
+/// or not: a merged PR doesn't always delete its remote branch. Without
+/// `[gone]` it is deleted only when `<base>` holds its commits or an equal
+/// squashed patch, it has no open PR, and it isn't sitting at `<base>`
+/// itself, as a branch just cut from it does.
+///
 /// When the branch to delete is the one checked out in the main checkout,
 /// the checkout is first switched to an up-to-date `<base>` -- provided it
 /// has no local changes, which the switch could clobber.
@@ -96,6 +102,30 @@ public struct Cleanup: Sendable {
         return .keep("review manually: no PR, not merged into \(baseRef)")
     }
 
+    /// The verdict for the checked-out branch when its remote branch is still
+    /// there (or it never had one). Like `git-main`, it asks whether `<base>`
+    /// holds the branch's content, not whether a PR merged it.
+    func checkedOutVerdict(for branch: String, baseRef: String, log: Logger) async -> Verdict {
+        do {
+            if try await lookup(branch) == .open { return .keep("PR still open") }
+        } catch {
+            await log("! \(error.localizedDescription)")
+            return .keep("couldn't check its PR")
+        }
+        // A merged PR always leaves `<base>` past the branch: GitHub merges
+        // with a new commit. Sitting at `<base>` itself means just cut.
+        if await repo.git("rev-parse", branch).out == (await repo.git("rev-parse", baseRef).out) {
+            return .keep("nothing on it yet")
+        }
+        if await repo.git("merge-base", "--is-ancestor", branch, baseRef).ok {
+            return .delete("already in \(baseRef)")
+        }
+        if await isSquashMerged(branch, into: baseRef) {
+            return .delete("an equal patch is in \(baseRef)")
+        }
+        return .keep("not merged into \(baseRef)")
+    }
+
     /// A squash merge rewrites the branch as one new commit, so none of the
     /// branch's own commits are in base's history. Ask about content instead:
     /// collapse the branch into one commit off the merge base and let
@@ -110,18 +140,20 @@ public struct Cleanup: Sendable {
 
     /// Returns the space freed by the worktrees removed with their branches.
     func cleanBranches(base: String, baseRef: String, trees: [Worktree], log: Logger) async throws -> Int64 {
-        let candidates = try await goneBranches(excluding: base)
-        guard !candidates.isEmpty else {
-            await log("no [gone] branches")
-            return 0
-        }
+        var candidates = try await goneBranches(excluding: base)
+        if candidates.isEmpty { await log("no [gone] branches") }
         let current = await repo.currentBranch()
+        // Checked out but not [gone]: judged by `checkedOutVerdict`.
+        let liveCurrent = current.flatMap { $0 != base && !candidates.contains($0) ? $0 : nil }
+        if let liveCurrent { candidates.append(liveCurrent) }
         let attached = Dictionary(trees.compactMap { tree in tree.branch.map { ($0, tree) } },
                                   uniquingKeysWith: { first, _ in first })
 
         var freed: Int64 = 0
         for branch in candidates {
-            let verdict = await verdict(for: branch, baseRef: baseRef, log: log)
+            let verdict = branch == liveCurrent
+                ? await checkedOutVerdict(for: branch, baseRef: baseRef, log: log)
+                : await verdict(for: branch, baseRef: baseRef, log: log)
             guard case .delete(let reason) = verdict else {
                 if case .keep(let reason) = verdict { await log("\(branch): keep (\(reason))") }
                 continue
