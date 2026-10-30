@@ -14,6 +14,7 @@ bin=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin/$name" "$app/Contents/MacOS/$name"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,6 +26,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key><string>me.vesnin.reposweep</string>
     <key>CFBundleExecutable</key><string>$name</string>
     <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleShortVersionString</key><string>${version#v}</string>
     <key>CFBundleVersion</key><string>${version#v}</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>

@@ -1,5 +1,7 @@
 # RepoSweep
 
+<img src="Resources/AppIcon.png" width="128" alt="">
+
 A small macOS app for keeping a folder full of git checkouts tidy. Pick a
 working directory, and RepoSweep lists every repository under it, with a link
 to each one on GitHub and its open pull requests underneath.
@@ -64,6 +66,9 @@ handles them.
 ./scripts/build-app.sh            # builds build/RepoSweep.app
 ./scripts/build-app.sh --install  # and copies it to /Applications
 ```
+
+The icon is drawn by `scripts/make-icon.swift`, which writes
+`Resources/AppIcon.icns`; rerun it after changing the drawing.
 
 The app is ad-hoc signed and not notarized, so it's meant to be built
 locally. For development:
