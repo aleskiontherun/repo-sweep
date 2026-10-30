@@ -98,7 +98,7 @@ struct WorkspaceView: View {
             } label: {
                 Label("Cleanup all", systemImage: "scissors")
             }
-            .help("Delete local branches that were merged, in every repository")
+            .help("Delete local branches that were merged, in every repository (⇧⌘K)")
 
             Toggle("Dry run", isOn: dryRun)
                 .toggleStyle(.checkbox)

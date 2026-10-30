@@ -37,6 +37,7 @@ struct RepoSweepApp: App {
                 Button("Update All") { Task { await workspace.updateAll() } }
                     .keyboardShortcut("r")
                 Button("Cleanup All") { Task { await workspace.cleanupAll() } }
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
                 Divider()
                 Button("Rescan Without Fetching") { Task { await workspace.scan() } }
             }

@@ -10,7 +10,7 @@ to each one on GitHub and its open pull requests underneath.
   the worktrees left behind with them.
 - **Update all** (⌘R) first rescans the working directory, so repositories
   added or deleted since the last look join or leave the list, then updates
-  every one, a few at a time. **Cleanup all** cleans up every one.
+  every one, a few at a time. **Cleanup all** (⇧⌘K) cleans up every one.
 
 ## What Cleanup deletes
 
